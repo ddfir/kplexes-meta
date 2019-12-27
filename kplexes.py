@@ -335,6 +335,7 @@ def experiments():
                               file = log_file)
                         log_file.flush()
 
+                        recursive_time = time.time()
                         core_only = set()
                         cliq_only = set()
                         surv = set()
@@ -349,6 +350,7 @@ def experiments():
                             core_only.update([u for u in HB.nodes() if Co[u] >= m-k])
                             cliq_only.update([u for u in HB.nodes() if Cl[u] >= math.floor(m/k)])
                             surv.update([u for u in HB.nodes() if Co[u] >= m-k and Cl[u] >= math.floor(m/k)])                                
+                        recursive_time = time.time() - recursive_time
 
                         H = G.subgraph(surv)
                         size_H_local = H.number_of_nodes()                                        
@@ -357,8 +359,8 @@ def experiments():
                         cliq_only = len(cliq_only)
 
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3s %6s %20s %5d %5d %7d %10d %7d %7d %7d %10s %8s %8s %33s %10s %10.4f %10.4f" %\
-                             (t, gf, k, '----', "MCONST-BLOC", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, '', '', '', "------------------", "", core_time, clique_time), \
+                        print("%20s %20s %3s %6s %20s %5d %5d %7d %10d %7d %7d %7d %10s %8s %8s %33s %10s %21.4f" %\
+                             (t, gf, k, '----', "MCONST-BLOC", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, '', '', '', "------------------", "", recursive_time), \
                               file = log_file)
                         log_file.flush()                                                           
                     except: 
