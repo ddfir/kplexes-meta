@@ -174,23 +174,6 @@ def large_plexes_sing(H, k, m, stat):
     end = time.time()
     stat.update_max_time(end-start)
 
-def large_plexes_iter(H, k, m, stat):
-    stat.set_size_H(H.number_of_nodes())    
-
-    for K in nx.find_cliques(H):
-        B = neighborhood(H, K)
-        HB = H.subgraph(B)
-        
-        start = time.time()
-        for P in all_plexes(HB, k, stat):
-            if len(P) >= m and is_parent_clique(H, P, K):
-                yield P
-            else:
-                stat.add_redundant()
-
-        end = time.time()
-        stat.update_max_time(end-start)
-
 def process_clique_batch(H, k, m, cliques, l, r, batch_id, resultdic, stat):
     results = []
 
@@ -217,13 +200,10 @@ def large_plexes_thre(H, k, m, procnum, threaddict, stat):
     Q = list(nx.find_cliques(H))
     shuffle(Q)
 
-    #########################################
     #---------------------------------------#
-    #########################################
-    batch_size = 2 #math.ceil(len(Q)/procnum)
-    #########################################
+    batch_size = math.ceil(len(Q)/procnum)  #
+    #batch_size = 1
     #---------------------------------------#
-    #########################################
     manager    = multiprocessing.Manager()
     resultdic  = manager.dict()
 
@@ -231,9 +211,11 @@ def large_plexes_thre(H, k, m, procnum, threaddict, stat):
         for (i,l) in enumerate(range(0, len(Q), batch_size)):
             threaddict[i] = multiprocessing.Process(target=process_clique_batch, args=(H, k, m, Q, l, l + batch_size, i, resultdic, stat), daemon=True)
             threaddict[i].start()
+        print("%s started %d threads (batch_size=%d, procnum=%d)" % (datetime.today().strftime('%Y-%m-%d %H:%M:%S'), i+1, batch_size, procnum), file = sys.stderr)        
 
     for (i,p) in threaddict.items():
         p.join()        
+        print("%s ended thread %d" % (datetime.today().strftime('%Y-%m-%d %H:%M:%S'), i), file = sys.stderr)        
         yield from resultdic[i]
 
 def max_plexes_greedy(G, k):
@@ -263,15 +245,12 @@ def max_plexes_binary(G, k):
             yield P
 
 # Run
-
 def experiments():
     signal.signal(signal.SIGALRM, handler)
     t          = datetime.today().strftime('%Y%m%d_%H%M%S')
     log_file   = open("%s.log"%t,"w") #sys.stdout
+    #log_file   = sys.stdout
 
-#   print("%20s %20s %3s %5s %20s %5s %5s %7s %10s %7s %7s %7s %10s %8s %8s %5s %5s %10s %10s %10s %10s %10s" %\
-#        ("timestamp", "gf", "k", "fatt", "alg", "o", "m", "n", "edges", "H", "H_core", "H_cliq", "sumedges", "blocks", "maxblock", "found", "smax", "tottime", "redundant", "maxtime", "coretime", "cliquetime"), \
-#         file = log_file)
     print("%20s %20s %3s %6s %20s %5s %5s %7s %10s %7s %7s %7s %10s %8s %8s %5s %5s %10s %10s %10s %10s %10s" %\
          ("timestamp", "gf", "k", "const", "alg", "o", "m", "n", "edges", "H", "H_core", "H_cliq", "sumedges", "blocks", "maxblock", "found", "smax", "tottime", "redundant", "maxtime", "coretime", "cliquetime"), \
           file = log_file)
@@ -279,41 +258,32 @@ def experiments():
 
     all_files = (os.path.join(basedir, filename) for basedir, dirs, files in os.walk(indir) for filename in files)
     sorted_files = sorted(all_files, key = os.path.getsize)
-#   sorted_files = ['input_data/real-cagrqc.aa']
+    #sorted_files = ['input_data/real-cagrqc.aa']
     print(sorted_files)
 
-    for k in [2]:
+    for k in [2, 3]:
         for filename in sorted_files:
             if filename.endswith(extension):
+                G  = nx.read_edgelist(filename)
+                #G.remove_edges_from(G.selfloop_edges())
+                gf = os.path.basename(filename).split('.')[0]                
+                signal.alarm(timeout)
+                try:   
+                    o  = max(len(K) for K in nx.find_cliques(G))
+                except: 
+                    t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+                    print("%20s %20s %3s %6s %20s %5s %5s %7d %10d %7s %7s %7s %10s %8s %8s %33s %10s" %\
+                         (t, gf, k, '----', "INIT", "", "", G.number_of_nodes(), G.number_of_edges(), '', '', '', '', '', '', "*****TIMEOUT******", ""), \
+                          file = log_file)
+                    log_file.flush()
+                signal.alarm(0) 
 
-                #for fatt in [200, 100, 90, 80, 70, 60, 50, 40, 30, 25, 20, 10]: #see line 288
-                for fatt in [10]:
-                    
-                    signal.alarm(timeout)
-                    try:   
-                        G  = nx.read_edgelist(filename)
-                        #G.remove_edges_from(G.selfloop_edges())
-                        gf = os.path.basename(filename).split('.')[0]
-                        o  = max(len(K) for K in nx.find_cliques(G))
-                        #m  = max(k**2, fatt * o)
-                        m  = fatt
-                    except: 
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3s %6s %20s %5s %5s %7d %10d %7s %7s %7s %10s %8s %8s %33s %10s" %\
-                             (t, gf, k, '----', "INIT", "", "", G.number_of_nodes(), G.number_of_edges(), '', '', '', '', '', '', "*****TIMEOUT******", ""), \
-                              file = log_file)
-                        log_file.flush()
-                    signal.alarm(0) 
+                for (fatt,label) in [(10,'10'), (50,'50'), (100,'100')]:
+                    m  = max(k**2, math.ceil(fatt))
 
                     ## filtering stats ##
                     signal.alarm(timeout)
                     try:   
-                        mconst = -1 #in case of timeout
-
-                        G  = nx.read_edgelist(filename)
-                        #G.remove_edges_from(G.selfloop_edges())
-                        gf = os.path.basename(filename).split('.')[0]
-
                         core_time = time.time()
                         Co = nx.core_number(G)
                         core_time = time.time() - core_time
@@ -331,81 +301,54 @@ def experiments():
 
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
                         print("%20s %20s %3s %6s %20s %5d %5d %7d %10d %7d %7d %7d %10s %8s %8s %33s %10s %10.4f %10.4f" %\
-                             (t, gf, k, '----', "MCONST-GLOB", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, '', '', '', "------------------", "", core_time, clique_time), \
+                             (t, gf, k, label, "F-STATS", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, '', '', '', "", "", core_time, clique_time), \
                               file = log_file)
                         log_file.flush()
 
                         recursive_time = time.time()
-                        core_only = set()
-                        cliq_only = set()
-                        surv = set()
-                        for K in nx.find_cliques(H):
-                            B = neighborhood(H, K)
-                            HB = H.subgraph(B)  
-
-                            #recursive filter
-                            Co = nx.core_number(HB)
-                            Cl = clique_number(HB)
-
-                            core_only.update([u for u in HB.nodes() if Co[u] >= m-k])
-                            cliq_only.update([u for u in HB.nodes() if Cl[u] >= math.floor(m/k)])
-                            surv.update([u for u in HB.nodes() if Co[u] >= m-k and Cl[u] >= math.floor(m/k)])                                
+                        H = graph_filter_recursive(G, k, m)
                         recursive_time = time.time() - recursive_time
 
-                        H = G.subgraph(surv)
                         size_H_local = H.number_of_nodes()                                        
+                        sum_edges_local = 0
 
-                        core_only = len(core_only)
-                        cliq_only = len(cliq_only)
+                        dist = defaultdict(int)
+                        blocks_local, max_nodes_local, max_block, max_block_clique = 0, 0, 0, 0
+                        for K in nx.find_cliques(H):
+                            B = neighborhood(H, K)
+                            HB = H.subgraph(B)
+                            sum_edges_local += HB.number_of_edges()
+                            blocks_local += 1
+                            if len(B) > max_nodes_local:
+                                max_nodes_local = len(B)
+                                max_block = B
+                                max_block_clique = K
 
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3s %6s %20s %5d %5d %7d %10d %7d %7d %7d %10s %8s %8s %33s %10s %21.4f" %\
-                             (t, gf, k, '----', "MCONST-BLOC", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, '', '', '', "------------------", "", recursive_time), \
-                              file = log_file)
+                        print("%20s %20s %3d %6s %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %11s %10.2f %10s %10s %10s" %\
+                             (t, gf, k, label, "2SF-STATS", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, sum_edges_local, blocks_local, max_nodes_local, "", recursive_time, "", "", ""), \
+                              file = log_file)                        
                         log_file.flush()                                                           
                     except: 
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
                         print("%20s %20s %3s %6s %20s %5d %5d %7d %10d %7s %7s %7s %10s %8s %8s %33s %10s" %\
-                             (t, gf, k, '----', "MCONST", o, m, G.number_of_nodes(), G.number_of_edges(), '', '', '', '', '', '', "*****TIMEOUT******", ""), \
+                             (t, gf, k, label, "MCONST", o, m, G.number_of_nodes(), G.number_of_edges(), '', '', '', '', '', '', "*****TIMEOUT******", ""), \
                               file = log_file)
                         log_file.flush()
                         continue
-                    signal.alarm(0)   
-                    continue   
+                    signal.alarm(0) 
                     ###################
 
-                    ## prelim stats ##
-                    Co = nx.core_number(G)                
-                    Cl = clique_number(G)
-                    
-                    core_only = len([u for u in G.nodes() if Co[u] >= m-k])
-                    cliq_only = len([u for u in G.nodes() if Cl[u] >= math.floor(m/k)])
-                    surv = [u for u in G.nodes() if Co[u] >= m-k and Cl[u] >= math.floor(m/k)]
-                    H = G.subgraph(surv)
-                    size_H_local = H.number_of_nodes()
-                    sum_edges_local = 0
-
-                    dist = defaultdict(int)
-                    blocks_local, max_nodes_local, max_block, max_block_clique = 0, 0, 0, 0
-                    for K in nx.find_cliques(H):
-                        B = neighborhood(H, K)
-                        HB = H.subgraph(B)
-                        sum_edges_local += HB.number_of_edges()
-                        blocks_local += 1
-                        if len(B) > max_nodes_local:
-                            max_nodes_local = len(B)
-                            max_block = B
-                            max_block_clique = K
-
+                    ## maxblock stats ##
                     #signal.alarm(timeout)
                     #try:
                     #    start = time.time()
                     #    if (size_H_local > 0):
                     #        nx.write_edgelist(H.subgraph(max_block), berin)
-#
+
                     #        argstring = "--file=%s --k=%d --type=connected --num_of_kplex=%d --output=%s --size=0"           % (berin, k, 999999999999, berout)
                     #        call("python2.7 %s %s" % (berexe, argstring), shell=True, stdout=DEVNULL)
-#
+
                     #        with open("%s_connected" % berout, "r") as f:
                     #            for line in f:
                     #                P = line.rstrip('\n').split(',')
@@ -413,74 +356,16 @@ def experiments():
                     #    end = time.time()
                     #    max_time_local = end-start
                     #except: 
-                    #    t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                    #    print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %33s %10s" %\
-                    #         (t, gf, k, fatt, "MAXBLOCK", o, m, G.number_of_nodes(), G.number_of_edges(), size_H_local, core_only, cliq_only, sum_edges_local, blocks_local, max_nodes_local, "*****TIMEOUT******", ""), \
-                    #          file = log_file)
-                    #    log_file.flush()
                     #    continue
                     #signal.alarm(0)
                     ###################
-                                
-                    ##SEQUENZIALE CON FILTRO
-                    '''
-                    size_H, redundant, max_time = 0, 0, 0
-                    stat = Stats()
-                    signal.alarm(timeout)
-                    try:
-                        start = time.time()
-                        Pnum, Smax = 0, 0 
-                        for P in large_plexes_iter(graph_filter_recursive(G, k, m), k, m, stat):
-                            Pnum +=1
-                            if (len(P) > Smax):
-                                Smax = len(P)
-                        end = time.time()
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
-                             (t, gf, k, fatt, "ITERAT(H)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
-                              file = log_file)
-                        log_file.flush()                    
-                    except: 
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %33s %10.2f" %\
-                             (t, gf, k, fatt, "ITERAT(H)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, sum_edges_local, blocks_local, max_nodes_local, "*****TIMEOUT******", max_time_local), \
-                              file = log_file)
-                        log_file.flush()                    
-                    signal.alarm(0)
-                    '''
-                    ###################
 
-                    ##SEQUENZIALE SENZA FILTRO
-                    '''
+                for (fatt,label) in [(o+1,'max'), (0.5*o,'50%'), (0.75*o,'75%'), (1.0*o,'100%')]:
+                    m  = max(k**2, math.ceil(fatt))                    
+                       
+                    ##SOLO FILTRO
                     size_H, redundant, max_time = 0, 0, 0
                     stat = Stats()
-                    signal.alarm(timeout)
-                    try:
-                        start = time.time()
-                        Pnum, Smax = 0, 0 
-                        for P in large_plexes_iter(G, k, m, stat):
-                            Pnum +=1
-                            if (len(P) > Smax):
-                                Smax = len(P)
-                        end = time.time()
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
-                             (t, gf, k, fatt, "ITERAT(G)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
-                              file = log_file)
-                        log_file.flush()                    
-                    except: 
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "ITERAT(G)", "*****TIMEOUT******"), \
-                              file = log_file)
-                        log_file.flush()                   
-                    signal.alarm(0)          
-                    '''
-                    ###################
-                       
-                    ##SOLO FILTRO 
-                    '''                    
-                    size_H, redundant, max_time = 0, 0, 0
-                    stat = Stats()                
                     signal.alarm(timeout)
                     try:
                         start = time.time()
@@ -491,47 +376,19 @@ def experiments():
                                 Smax = len(P)
                         end = time.time()
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
-                             (t, gf, k, fatt, "EXHAUS(H)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
+                        print("%20s %20s %3d %6s %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
+                             (t, gf, k, label, "VANIL(H)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
                               file = log_file)
                         log_file.flush()                    
                     except: 
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "EXHAUS(H)", "*****TIMEOUT******"), \
+                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "VANIL(H)", "*****TIMEOUT******"), \
                               file = log_file)
                         log_file.flush()                    
                     signal.alarm(0)
-                    '''                    
                     ###################
 
-                    ##BERLOWITZ 
-                    '''
-                    size_H, redundant, max_time = 0, 0, 0
-                    stat = Stats()
-                    signal.alarm(timeout)
-                    try:
-                        start = time.time()
-                        Pnum, Smax = 0, 0 
-                        for P in large_plexes_sing(G, k, m, stat):
-                            Pnum +=1
-                            if (len(P) > Smax):
-                                Smax = len(P)
-                        end = time.time()
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
-                             (t, gf, k, fatt, "EXHAUS(G)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
-                              file = log_file)
-                        log_file.flush()                    
-                    except: 
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "EXHAUS(G)", "*****TIMEOUT******"), \
-                              file = log_file)
-                        log_file.flush()                    
-                    signal.alarm(0) 
-                    ''' 
-                    ###################   
-
-                    ##MULTITHREAD                   
+                    ##FILTRO + BLOCCHI
                     size_H = 0
                     stat = Stats()                
                     threaddict = {}
@@ -539,14 +396,14 @@ def experiments():
                     try:
                         start = time.time()
                         Pnum, Smax = 0, 0 
-                        for P in large_plexes_thre(graph_filter_recursive(G, k, m), k, m, 30, threaddict, stat):
+                        for P in large_plexes_thre(graph_filter_recursive(G, k, m), k, m, 31, threaddict, stat):
                             Pnum +=1
                             if (len(P) > Smax):
                                 Smax = len(P)
                         end = time.time()
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
-                             (t, gf, k, fatt, "30THRE(H)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
+                        print("%20s %20s %3d %6s %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
+                             (t, gf, k, label, "BLOCKS(H)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
                               file = log_file)
                         log_file.flush()                    
                     except:
@@ -555,43 +412,11 @@ def experiments():
                                 p.terminate()
                                 p.join()        
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "30THRE(H)", "*****TIMEOUT******"), \
+                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "BLOCKS(H)", "*****TIMEOUT******"), \
                               file = log_file)
                         log_file.flush()
                         #break                    
-                    signal.alarm(0)                       
-                    ###################  
-
-                    ##MULTITHREAD NO FILTRO
-                    '''
-                    size_H = 0
-                    stat = Stats()                
-                    threaddict = {}                
-                    signal.alarm(timeout)
-                    try:
-                        start = time.time()
-                        Pnum, Smax = 0, 0 
-                        for P in large_plexes_thre(G, k, m, 30, threaddict, stat):
-                            Pnum +=1
-                            if (len(P) > Smax):
-                                Smax = len(P)
-                        end = time.time()
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %5d %5d %7d %10d %7d %7d %7d %10s %8s %8s %5d %5d %10.2f %10d %10.2f" %\
-                             (t, gf, k, fatt, "30THRE(G)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
-                              file = log_file)
-                        log_file.flush()                    
-                    except:
-                        for (i,p) in threaddict.items():
-                            if (p.is_alive()):
-                                p.terminate()
-                                p.join()                        
-                        t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "30THRE(G)", "*****TIMEOUT******"), \
-                              file = log_file)
-                        log_file.flush()                    
-                    signal.alarm(0)
-                    '''   
+                    signal.alarm(0)  
                     ###################  
                     
                     #for P in max_plexes_greedy(G, k):
@@ -601,6 +426,67 @@ def experiments():
                     #for P in max_plexes_binary(G, k):
                     #    print(sorted(P))
                     #print(" ")
+
+                ##SOLO BLOCCHI
+                fatt  = k**2
+                label = 'all'
+                m     = fatt
+                size_H = 0
+                stat = Stats()                
+                threaddict = {}                
+                signal.alarm(timeout)
+                try:
+                    start = time.time()
+                    Pnum, Smax = 0, 0 
+                    for P in large_plexes_thre(G, k, m, 31, threaddict, stat):
+                        Pnum +=1
+                        if (len(P) > Smax):
+                            Smax = len(P)
+                    end = time.time()
+                    t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+                    print("%20s %20s %3d %6s %20s %5d %5d %7d %10d %7d %7d %7d %10s %8s %8s %5d %5d %10.2f %10d %10.2f" %\
+                         (t, gf, k, label, "BLOCKS(G)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
+                          file = log_file)
+                    log_file.flush()                    
+                except:
+                    for (i,p) in threaddict.items():
+                        if (p.is_alive()):
+                            p.terminate()
+                            p.join()                        
+                    t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+                    print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "BLOCKS(G)", "*****TIMEOUT******"), \
+                          file = log_file)
+                    log_file.flush()                    
+                signal.alarm(0)
+                ###################  
+
+                ##NIENTE 
+                '''
+                size_H, redundant, max_time = 0, 0, 0
+                stat = Stats()
+                signal.alarm(timeout)
+                try:
+                    start = time.time()
+                    Pnum, Smax = 0, 0 
+                    for P in large_plexes_sing(G, k, m, stat):
+                        Pnum +=1
+                        if (len(P) > Smax):
+                            Smax = len(P)
+                    end = time.time()
+                    t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+                    print("%20s %20s %3d %6s %20s %5d %5d %7d %10d %7d %7d %7d %10d %8d %8d %5d %5d %10.2f %10d %10.2f" %\
+                         (t, gf, k, label, "VANIL(G)", o, m, G.number_of_nodes(), G.number_of_edges(), stat.size_H.value, core_only, cliq_only, stat.sum_edges.value, stat.blocks.value, stat.max_nodes.value, Pnum, Smax, end-start, stat.redundant.value, stat.max_time.value), \
+                          file = log_file)
+                    log_file.flush()                    
+                except: 
+                    t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+                    print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "VANIL(G)", "*****TIMEOUT******"), \
+                          file = log_file)
+                    log_file.flush()                    
+                signal.alarm(0) 
+                '''
+                ###################   
+
             print("",file = log_file)
             log_file.flush()
 
