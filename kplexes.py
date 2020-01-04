@@ -278,7 +278,7 @@ def experiments():
                     log_file.flush()
                 signal.alarm(0) 
 
-                for (fatt,label) in [(10,'10'), (50,'50'), (100,'100')]:
+                for (fatt,label) in [(100,'100'), (50,'50'), (10,'10')]:
                     m  = max(k**2, math.ceil(fatt))
 
                     ## filtering stats ##
@@ -360,7 +360,7 @@ def experiments():
                     #signal.alarm(0)
                     ###################
 
-                for (fatt,label) in [(o+1,'max'), (0.5*o,'50%'), (0.75*o,'75%'), (1.0*o,'100%')]:
+                for (fatt,label) in [(o+1,'max'), (1.0*o,'100%'), (0.75*o,'75%'), (0.5*o,'50%')]:
                     m  = max(k**2, math.ceil(fatt))                    
                        
                     ##SOLO FILTRO
