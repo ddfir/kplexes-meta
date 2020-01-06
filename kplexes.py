@@ -360,7 +360,7 @@ def experiments():
                     #signal.alarm(0)
                     ###################
 
-                for (fatt,label) in [(o+1,'max'), (1.0*o,'100%'), (0.75*o,'75%'), (0.5*o,'50%')]:
+                for (fatt,label) in [(o+1,'max'), (1.0*o,'100%'), (0.75*o,'75%'),(0.5*o,'50%')]:
                     m  = max(k**2, math.ceil(fatt))                    
                        
                     ##SOLO FILTRO
@@ -382,7 +382,7 @@ def experiments():
                         log_file.flush()                    
                     except: 
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "VANIL(H)", "*****TIMEOUT******"), \
+                        print("%20s %20s %3d %6s %20s %117s" % (t, gf, k, label, "VANIL(H)", "*****TIMEOUT******"), \
                               file = log_file)
                         log_file.flush()                    
                     signal.alarm(0)
@@ -412,7 +412,7 @@ def experiments():
                                 p.terminate()
                                 p.join()        
                         t = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-                        print("%20s %20s %3d %6.2f %20s %117s" % (t, gf, k, fatt, "BLOCKS(H)", "*****TIMEOUT******"), \
+                        print("%20s %20s %3d %6s %20s %117s" % (t, gf, k, label, "BLOCKS(H)", "*****TIMEOUT******"), \
                               file = log_file)
                         log_file.flush()
                         #break                    
